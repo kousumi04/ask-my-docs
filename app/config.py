@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
+    qdrant_local_path: str | None = "data/qdrant"
     qdrant_collection: str = "ask_my_docs"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384
