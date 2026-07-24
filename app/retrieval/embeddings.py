@@ -26,13 +26,17 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from sentence_transformers import SentenceTransformer
-
 from app.config import settings
 
 
 @lru_cache(maxsize=1)
-def _get_model() -> SentenceTransformer:
+def _get_model():
+    from sentence_transformers import SentenceTransformer  # lazy: avoids pulling in torch at
+
+    # app startup / import time -- reranker.py and llm_client.py both follow this same
+    # lazy-import-inside-the-function pattern for their heavy/network-dependent deps, for
+    # the same reason: importing app.retrieval.embeddings (transitively, importing app.main)
+    # should not itself cost a multi-second torch import before the model is ever used.
     return SentenceTransformer(settings.embedding_model)
 
 

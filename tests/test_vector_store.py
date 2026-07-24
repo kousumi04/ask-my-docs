@@ -74,3 +74,34 @@ def test_upsert_and_search_ranks_by_true_similarity(client):
     returned_ids = {r["chunk_id"] for r in results}
     assert returned_ids == {"c1", "c2"}, f"Expected the two broker-concept chunks, got {returned_ids}"
     assert results[0]["score"] >= results[1]["score"], "Results must be sorted by descending similarity"
+
+
+def test_reindexing_same_chunk_is_idempotent_not_duplicated(client):
+    """Point IDs are derived deterministically from chunk_id (see
+    vector_store._point_id) specifically so Phase 7's incremental upload
+    endpoint can safely re-index a file without ever duplicating or
+    colliding with existing points. This proves that property directly."""
+    chunk = _make_chunk("c1", "broker connection timeout error")
+    vector = _concept_vector(seed=1)
+
+    upsert_chunks(client, [chunk], [vector], collection_name=TEST_COLLECTION)
+    upsert_chunks(client, [chunk], [vector], collection_name=TEST_COLLECTION)  # re-index the SAME chunk
+
+    count = client.count(collection_name=TEST_COLLECTION).count
+    assert count == 1, f"Expected exactly 1 point after re-indexing the same chunk twice, got {count}"
+
+
+def test_incremental_upsert_does_not_collide_with_existing_points(client):
+    """Simulates the real Phase 7 scenario: an initial batch is indexed,
+    then a second, unrelated batch (a new file upload) is indexed later.
+    The old positional-index ID scheme would have collided here (both
+    batches would restart at id=0); the deterministic chunk_id-based
+    scheme must not."""
+    first_batch = [_make_chunk("fileA::0", "broker connection timeout error")]
+    upsert_chunks(client, first_batch, [_concept_vector(seed=1)], collection_name=TEST_COLLECTION)
+
+    second_batch = [_make_chunk("fileB::0", "how to schedule a periodic task")]
+    upsert_chunks(client, second_batch, [_concept_vector(seed=2)], collection_name=TEST_COLLECTION)
+
+    count = client.count(collection_name=TEST_COLLECTION).count
+    assert count == 2, f"Expected both batches' points to coexist, got {count}"

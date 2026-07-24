@@ -8,13 +8,15 @@ is a real service: it persists to disk, supports filtering search
 results by payload (e.g. "only chunks from source=X"), and is what
 teams actually run in production, not just prototype with.
 
-DEV VS PRODUCTION MODE: Qdrant supports an embedded local-file mode
-(QdrantClient(path=...)) with no server process required, which is
-what we use here for a from-scratch build without requiring Docker to
-already be running. It uses the identical client API as the real
-server mode -- the only change to go to production is removing
-qdrant_local_path and pointing host/port at the Dockerized Qdrant
-container from Phase 9. Nothing else in this module changes.
+DEV VS CLOUD VS SELF-HOSTED: get_client() checks, in order: (1)
+settings.qdrant_url -- if set, connects to Qdrant Cloud (or any remote
+Qdrant) using that URL plus settings.qdrant_api_key; (2)
+settings.qdrant_local_path -- embedded local-file mode, no server
+needed, the default for from-scratch dev without any Qdrant account or
+Docker; (3) otherwise, host/port for a self-hosted server (e.g. a
+Docker container with no auth). All three return the same QdrantClient
+type with an identical API -- nothing else in this module, or anywhere
+that calls it, needs to know or care which one is active.
 
 HNSW: Qdrant indexes vectors with HNSW (Hierarchical Navigable Small
 World), an approximate-nearest-neighbor graph structure. Exact nearest-
@@ -32,6 +34,7 @@ is a parameter, not a rewrite.
 
 from __future__ import annotations
 
+import uuid
 from functools import lru_cache
 
 from qdrant_client import QdrantClient
@@ -43,6 +46,8 @@ from app.ingestion.chunking import Chunk
 
 @lru_cache(maxsize=1)
 def get_client() -> QdrantClient:
+    if settings.qdrant_url:
+        return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
     if settings.qdrant_local_path:
         return QdrantClient(path=settings.qdrant_local_path)
     return QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
@@ -64,11 +69,25 @@ def ensure_collection(client: QdrantClient, collection_name: str | None = None, 
     )
 
 
+def _point_id(chunk_id: str) -> str:
+    """A deterministic UUID derived from the chunk's own (stable) chunk_id.
+
+    This replaced a positional-index ID scheme (id=idx from enumerate()),
+    which only worked for one-shot full rebuilds. The moment Phase 7 adds
+    incremental uploads, a second indexing run would restart enumeration
+    at 0 and silently overwrite or collide with unrelated existing points.
+    A deterministic ID derived from chunk_id instead means re-indexing the
+    same chunk is idempotent (upserts the same point), and indexing a new
+    file's chunks can never collide with an existing file's IDs.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_id))
+
+
 def upsert_chunks(client: QdrantClient, chunks: list[Chunk], vectors: list[list[float]], collection_name: str | None = None) -> None:
     collection_name = collection_name or settings.qdrant_collection
     points = [
         qmodels.PointStruct(
-            id=idx,
+            id=_point_id(chunk.chunk_id),
             vector=vector,
             payload={
                 "chunk_id": chunk.chunk_id,
@@ -81,7 +100,7 @@ def upsert_chunks(client: QdrantClient, chunks: list[Chunk], vectors: list[list[
                 "char_end": chunk.char_end,
             },
         )
-        for idx, (chunk, vector) in enumerate(zip(chunks, vectors))
+        for chunk, vector in zip(chunks, vectors)
     ]
     client.upsert(collection_name=collection_name, points=points)
 
