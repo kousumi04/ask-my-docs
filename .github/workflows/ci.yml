@@ -1,0 +1,46 @@
+name: CI
+
+# Two genuinely different jobs, deliberately kept separate:
+#   1. `test` -- the unit suite (37 tests). No network, no API keys, no
+#      cost. Runs on every push and PR, fast (a few seconds).
+#   2. `evaluate` -- the RAGAS quality gate. Needs GROQ_API_KEY and a
+#      populated Qdrant to run real questions through the real pipeline.
+#      This costs real API calls and takes minutes, not seconds, so it's
+#      worth being able to see at a glance in CI history which failure
+#      mode you're looking at: broken code vs quality regression.
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run unit tests
+        run: pytest tests/ -v
+
+  evaluate:
+    runs-on: ubuntu-latest
+    needs: test  # only run the (slower, costs API calls) eval gate if unit tests already pass
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run RAGAS evaluation gate
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+        run: python scripts/run_eval.py

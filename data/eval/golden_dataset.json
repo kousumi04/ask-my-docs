@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What does error E1101 mean?",
+    "reference_answer": "E1101 is a broker connection timeout, raised when the worker cannot reach the configured broker within connection_timeout_seconds, which defaults to 5 seconds.",
+    "reference_source": "queuely_docs.md"
+  },
+  {
+    "question": "What is the default task serializer, and what should I switch to if my task arguments include custom objects?",
+    "reference_answer": "The default serializer is msgpack. Switch to the json serializer if your task arguments include custom objects without __reduce__ defined.",
+    "reference_source": "queuely_docs.md"
+  },
+  {
+    "question": "What happens to a task once it exhausts its retries?",
+    "reference_answer": "It is moved to the dead-letter queue for manual inspection, along with its original arguments and the final exception traceback.",
+    "reference_source": "queuely_docs.md"
+  },
+  {
+    "question": "What terminationGracePeriodSeconds value should Queuely worker deployments use in Kubernetes, and why?",
+    "reference_answer": "120 seconds. Workers that receive SIGTERM during a long-running task won't finish it before the pod is killed unless terminationGracePeriodSeconds is raised above Kubernetes' default of 30 seconds.",
+    "reference_source": "deployment_notes.txt"
+  },
+  {
+    "question": "Which Prometheus metric indicates a task is failing deterministically rather than transiently?",
+    "reference_answer": "queuely_dead_letter_queue_size -- a sustained non-zero value usually means a task is failing on bad input rather than a transient issue.",
+    "reference_source": "deployment_notes.txt"
+  },
+  {
+    "question": "What three methods must a new broker backend implement?",
+    "reference_answer": "enqueue(task), dequeue(timeout), and ack(task_id), as defined by BrokerProtocol.",
+    "reference_source": "architecture_guide.docx"
+  },
+  {
+    "question": "How do I run the shared test suite against a new broker backend implementation?",
+    "reference_answer": "Run pytest tests/broker_contract.py --broker=yourbackend.",
+    "reference_source": "architecture_guide.docx"
+  },
+  {
+    "question": "How does Queuely support running a task on a recurring, cron-like schedule?",
+    "reference_answer": "Use the @periodic_task decorator. Scheduled tasks are stored with a next_run_at timestamp and picked up by a dedicated scheduler process, separate from regular worker processes.",
+    "reference_source": "api_reference.pdf"
+  }
+]

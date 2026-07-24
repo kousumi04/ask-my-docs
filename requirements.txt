@@ -13,7 +13,14 @@ python-docx==1.1.2
 # --- LLM client ---
 groq==0.11.0
 # --- Evaluation ---
+# ragas 0.1.x requires langchain-core<0.3. The current (much newer)
+# langchain-groq/langchain-huggingface releases pull in langchain-core
+# 1.x, which breaks ragas at import time -- pinning these older releases
+# keeps langchain-core on the 0.2.x line ragas expects. Verified together:
+# `pip check` reports no conflicts with this exact combination.
 ragas==0.1.20
+langchain-groq==0.1.9
+langchain-huggingface==0.0.3
 # --- Frontend ---
 streamlit==1.38.0
 requests==2.32.3

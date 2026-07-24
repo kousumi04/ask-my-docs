@@ -76,7 +76,13 @@ def add_document(file_path: Path) -> dict:
 
 
 def query(question: str, top_k_rerank: int | None = None) -> dict:
-    """The full retrieve -> rerank -> generate pipeline for one question."""
+    """The full retrieve -> rerank -> generate pipeline for one question.
+
+    Includes a "contexts" key (the reranked chunk texts actually used, in
+    order) alongside the usual answer/sources/is_fully_grounded -- added in
+    Phase 8 because RAGAS evaluation needs the exact retrieved context, not
+    just the final answer, to score faithfulness and context precision/recall.
+    """
     top_k_rerank = top_k_rerank or settings.top_k_rerank
 
     bm25_index = get_bm25_index()
@@ -84,6 +90,7 @@ def query(question: str, top_k_rerank: int | None = None) -> dict:
         return {
             "answer": "No documents have been indexed yet -- upload a document first.",
             "sources": [],
+            "contexts": [],
             "is_fully_grounded": False,
             "warning": "no_documents_indexed",
         }
@@ -96,4 +103,6 @@ def query(question: str, top_k_rerank: int | None = None) -> dict:
     fused = reciprocal_rank_fusion([dense_results, sparse_results], top_k=settings.top_k_dense)
     reranked = rerank(question, fused, top_k=top_k_rerank)
 
-    return answer_query(question, reranked)
+    result = answer_query(question, reranked)
+    result["contexts"] = [c["text"] for c in reranked]
+    return result
