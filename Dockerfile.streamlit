@@ -1,0 +1,20 @@
+# Separate image from the API deliberately: the frontend needs only
+# streamlit + requests, not the entire retrieval/generation dependency
+# chain (torch, sentence-transformers, ragas, ...). Building it
+# separately keeps this image a fraction of the API image's size and
+# means a frontend-only change doesn't invalidate the API's build cache.
+
+FROM python:3.11-slim
+
+RUN useradd --create-home --shell /bin/bash appuser
+WORKDIR /app
+
+RUN pip install --no-cache-dir streamlit==1.38.0 requests==2.32.3
+
+COPY streamlit_app.py .
+RUN chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "streamlit_app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]

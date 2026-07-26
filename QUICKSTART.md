@@ -256,7 +256,70 @@ curl -X POST http://localhost:8000/query -H "Content-Type: application/json" \
 
 ---
 
+## 8. Phase 9 — Docker & docker-compose
+
+**Important: none of this was tested in the environment that built it** —
+that sandbox has no Docker installed and can't reach Docker Hub even if
+it did. Everything below follows standard, well-established patterns,
+but you're the first real test of whether it actually builds and runs.
+Please report back what you see.
+
+### 8.1 Build and run everything
+
+```bash
+docker compose up --build
+```
+
+This builds two images (`api` from `Dockerfile`, `frontend` from
+`Dockerfile.streamlit`) and starts both, wired together on Docker's
+internal network. Qdrant Cloud is used as-is (no local Qdrant
+container needed) since your `.env` already has `QDRANT_URL` set.
+
+**How do I know it worked?**
+```bash
+curl http://localhost:8000/health
+# -> {"status":"ok","app":"Ask My Docs",...}
+```
+Open `http://localhost:8501` in a browser for the frontend — same as
+running it locally, just containerized.
+
+### 8.2 First-run model downloads still apply
+
+The containers don't pre-bake the embedding/reranker models (see the
+comment in `Dockerfile` for why) — the first upload/query inside the
+container will trigger the same one-time downloads as local dev. You
+can run the warmup script inside the running container:
+```bash
+docker compose exec api python scripts/warmup_models.py
+```
+
+### 8.3 Using self-hosted Qdrant instead of Cloud
+
+Not started by default. To use it:
+```bash
+docker compose --profile self-hosted-qdrant up --build
+```
+And in `.env`, switch from Cloud settings to:
+```
+QDRANT_URL=
+QDRANT_HOST=qdrant
+QDRANT_PORT=6333
+```
+
+### 8.4 Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| `docker: command not found` | Docker Desktop isn't installed — install it, then re-open your terminal |
+| Build fails pulling `python:3.11-slim` | No internet access, or a corporate proxy is blocking Docker Hub |
+| `frontend` container can't reach `api` | Confirm `docker-compose.yml`'s `ASK_MY_DOCS_API_URL: http://api:8000` wasn't accidentally changed to `localhost` — that only works outside containers |
+| Upload/query hangs a long time in a fresh container | Expected — first-time model download, same as local dev (see 8.2) |
+| Changes to `.py` files don't show up | The image is built once; re-run `docker compose up --build` after code changes (or add a bind-mount + `--reload` for active development, not shown here since this Dockerfile targets production-style builds) |
+
+---
+
 ## Troubleshooting quick reference
+| Symptom | Likely cause |
 |---|---|
 | `ModuleNotFoundError` on any `app.*` import | venv not activated, or you're running from the wrong directory (must be repo root) |
 | `pytest` fails on collection/import | dependency missing — re-run `pip install -r requirements.txt` |

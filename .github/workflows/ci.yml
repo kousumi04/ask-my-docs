@@ -1,6 +1,6 @@
 name: CI
 
-# Two genuinely different jobs, deliberately kept separate:
+# Three jobs, deliberately kept separate:
 #   1. `test` -- the unit suite (37 tests). No network, no API keys, no
 #      cost. Runs on every push and PR, fast (a few seconds).
 #   2. `evaluate` -- the RAGAS quality gate. Needs GROQ_API_KEY and a
@@ -8,6 +8,11 @@ name: CI
 #      This costs real API calls and takes minutes, not seconds, so it's
 #      worth being able to see at a glance in CI history which failure
 #      mode you're looking at: broken code vs quality regression.
+#   3. `build` -- builds both Docker images (api + frontend) and, only on
+#      pushes to main (not PRs), pushes them to GitHub Container Registry.
+#      Uses the built-in GITHUB_TOKEN, not a separate registry account or
+#      secret -- ghcr.io is free for public repos, consistent with this
+#      project's free-tools constraint.
 
 "on":
   push:
@@ -44,3 +49,34 @@ jobs:
           QDRANT_URL: ${{ secrets.QDRANT_URL }}
           QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
         run: python scripts/run_eval.py
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test  # build gets to run in parallel with the slower `evaluate` job -- both only need `test` to pass first
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose config
+        run: docker compose config --quiet
+
+      - name: Build API image
+        run: docker build -t ask-my-docs-api:${{ github.sha }} -f Dockerfile .
+
+      - name: Build frontend image
+        run: docker build -t ask-my-docs-frontend:${{ github.sha }} -f Dockerfile.streamlit .
+
+      - name: Log in to GitHub Container Registry
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker tag ask-my-docs-api:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/ask-my-docs-api:latest
+          docker tag ask-my-docs-frontend:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/ask-my-docs-frontend:latest
+          docker push ghcr.io/${{ github.repository_owner }}/ask-my-docs-api:latest
+          docker push ghcr.io/${{ github.repository_owner }}/ask-my-docs-frontend:latest

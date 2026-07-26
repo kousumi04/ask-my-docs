@@ -1,0 +1,50 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist ingested chunks and (if using local-file Qdrant instead of
+      # Cloud) the vector index across container restarts -- without this,
+      # every `docker compose up` would start from an empty corpus.
+      - ./data/processed:/app/data/processed
+      - ./data/qdrant_local:/app/data/qdrant_local
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      # Inside the compose network, "localhost" from the frontend container
+      # would NOT reach the api container -- "api" resolves via Docker's
+      # internal DNS to the api service. streamlit_app.py already reads
+      # this from an env var for exactly this reason (see Phase 7).
+      ASK_MY_DOCS_API_URL: http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Optional self-hosted Qdrant, NOT started by default. Only runs if you
+  # explicitly request it: `docker compose --profile self-hosted-qdrant up`.
+  # If you use this instead of Qdrant Cloud, also set in .env:
+  #   QDRANT_URL=          (blank)
+  #   QDRANT_HOST=qdrant
+  #   QDRANT_PORT=6333
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles: ["self-hosted-qdrant"]
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
