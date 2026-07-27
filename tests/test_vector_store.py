@@ -21,7 +21,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from app.ingestion.chunking import Chunk
-from app.retrieval.vector_store import ensure_collection, search, upsert_chunks
+from app.retrieval.vector_store import ensure_collection, scroll_chunks, search, upsert_chunks
 
 TEST_DIM = 16
 TEST_COLLECTION = "test_ask_my_docs"
@@ -105,3 +105,16 @@ def test_incremental_upsert_does_not_collide_with_existing_points(client):
 
     count = client.count(collection_name=TEST_COLLECTION).count
     assert count == 2, f"Expected both batches' points to coexist, got {count}"
+
+
+def test_scroll_chunks_rehydrates_chunk_payloads(client):
+    chunks = [
+        _make_chunk("fileA::0", "broker connection timeout error"),
+        _make_chunk("fileB::0", "how to schedule a periodic task"),
+    ]
+    upsert_chunks(client, chunks, [_concept_vector(seed=1), _concept_vector(seed=2)], collection_name=TEST_COLLECTION)
+
+    loaded = scroll_chunks(client, collection_name=TEST_COLLECTION, batch_size=1)
+
+    assert {chunk.chunk_id for chunk in loaded} == {"fileA::0", "fileB::0"}
+    assert {chunk.source for chunk in loaded} == {"test.md"}

@@ -7,18 +7,19 @@ than request validation and response shaping.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from app.api.schemas import QueryRequest, QueryResponse, UploadResponse
+from app.config import settings
 from app.core import pipeline
 from app.ingestion.pipeline import SUPPORTED_SUFFIXES
 
 router = APIRouter()
 
 RAW_DATA_DIR = pipeline.PROJECT_ROOT / "data" / "raw"
+MAX_UPLOAD_BYTES = settings.max_upload_mb * 1024 * 1024
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -38,8 +39,18 @@ async def upload_document(file: UploadFile) -> UploadResponse:
 
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
     dest_path = RAW_DATA_DIR / file.filename
+    bytes_written = 0
     with dest_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+        while chunk := file.file.read(1024 * 1024):
+            bytes_written += len(chunk)
+            if bytes_written > MAX_UPLOAD_BYTES:
+                f.close()
+                dest_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum supported upload size is {settings.max_upload_mb} MB.",
+                )
+            f.write(chunk)
 
     result = pipeline.add_document(dest_path)
     return UploadResponse(**result)

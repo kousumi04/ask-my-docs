@@ -11,6 +11,7 @@ doesn't need to.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 DEFAULT_THRESHOLDS: dict[str, float] = {
@@ -34,6 +35,9 @@ def check_thresholds(scores: dict[str, float], thresholds: dict[str, float] | No
     for metric, minimum in thresholds.items():
         if metric not in scores:
             failures.append(f"{metric}: missing from evaluation results")
+            continue
+        if not math.isfinite(scores[metric]):
+            failures.append(f"{metric}: did not produce a finite score")
             continue
         if scores[metric] < minimum:
             failures.append(f"{metric}: {scores[metric]:.3f} < {minimum:.3f}")

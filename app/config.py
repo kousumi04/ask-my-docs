@@ -45,8 +45,10 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
 
     # --- Retrieval tuning ---
+    max_upload_mb: int = 10
     chunk_size: int = 512
     chunk_overlap: int = 64
+    indexing_batch_size: int = 64
     top_k_dense: int = 20
     top_k_sparse: int = 20
     top_k_rerank: int = 5

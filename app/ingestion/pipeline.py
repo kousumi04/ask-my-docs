@@ -30,6 +30,7 @@ def ingest_directory(directory: Path) -> list[Chunk]:
 
 def save_chunks(chunks: list[Chunk], output_path: Path) -> None:
     """Persist chunks as JSON so Phase 3 can load them without re-parsing."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = [
         {
             "chunk_id": c.chunk_id,

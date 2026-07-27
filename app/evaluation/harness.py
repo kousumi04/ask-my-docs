@@ -71,6 +71,7 @@ def run_evaluation(samples: list[dict], llm=None, embeddings=None) -> dict[str, 
     from ragas import evaluate
     from ragas.dataset_schema import EvaluationDataset, SingleTurnSample
     from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
+    from ragas.run_config import RunConfig
 
     dataset = EvaluationDataset(samples=[SingleTurnSample(**s) for s in samples])
     result = evaluate(
@@ -78,6 +79,7 @@ def run_evaluation(samples: list[dict], llm=None, embeddings=None) -> dict[str, 
         metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=llm,
         embeddings=embeddings,
+        run_config=RunConfig(timeout=600, max_retries=10, max_wait=60, max_workers=4),
     )
     return dict(result)
 

@@ -26,7 +26,7 @@ from app.core.pipeline import query as pipeline_query  # noqa: E402
 from app.evaluation.gating import check_thresholds  # noqa: E402
 from app.evaluation.harness import load_and_build_samples, run_evaluation  # noqa: E402
 from app.evaluation.llm_adapter import get_ragas_embeddings, get_ragas_llm  # noqa: E402
-from app.evaluation.report import format_report  # noqa: E402
+from app.evaluation.reporting import format_report  # noqa: E402
 
 GOLDEN_DATASET_PATH = Path(__file__).resolve().parents[1] / "data" / "eval" / "golden_dataset.json"
 

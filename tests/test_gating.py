@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from app.evaluation.gating import DEFAULT_THRESHOLDS, check_thresholds
 
 
@@ -33,6 +35,13 @@ def test_check_thresholds_flags_a_missing_metric_rather_than_ignoring_it():
     result = check_thresholds(scores)
     assert result.passed is False
     assert any("context_recall" in f and "missing" in f for f in result.failures)
+
+
+def test_check_thresholds_flags_nan_metric_rather_than_passing_it():
+    scores = {"faithfulness": 0.90, "answer_relevancy": math.nan, "context_precision": 0.90, "context_recall": 0.90}
+    result = check_thresholds(scores)
+    assert result.passed is False
+    assert any("answer_relevancy" in f and "finite" in f for f in result.failures)
 
 
 def test_default_thresholds_cover_all_four_ragas_metrics_used():

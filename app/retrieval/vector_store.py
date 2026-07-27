@@ -113,3 +113,40 @@ def search(client: QdrantClient, query_vector: list[float], top_k: int, collecti
         limit=top_k,
     ).points
     return [{"score": r.score, **r.payload} for r in results]
+
+
+def scroll_chunks(client: QdrantClient, collection_name: str | None = None, batch_size: int = 256) -> list[Chunk]:
+    """Load chunk payloads from Qdrant so retrieval can recover if chunks.json
+    is missing or older than the vector store."""
+    collection_name = collection_name or settings.qdrant_collection
+    if not client.collection_exists(collection_name):
+        return []
+
+    chunks: list[Chunk] = []
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=collection_name,
+            limit=batch_size,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        for point in points:
+            payload = point.payload or {}
+            if {"chunk_id", "text", "source", "file_type", "chunk_index", "char_start", "char_end"} <= payload.keys():
+                chunks.append(
+                    Chunk(
+                        chunk_id=payload["chunk_id"],
+                        text=payload["text"],
+                        source=payload["source"],
+                        file_type=payload["file_type"],
+                        chunk_index=payload["chunk_index"],
+                        char_start=payload["char_start"],
+                        char_end=payload["char_end"],
+                        page_number=payload.get("page_number"),
+                    )
+                )
+        if offset is None:
+            break
+    return chunks

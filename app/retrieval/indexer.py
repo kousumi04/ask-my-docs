@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.config import settings
 from app.ingestion.chunking import Chunk
 from app.retrieval.embeddings import embed_texts
 from app.retrieval.vector_store import ensure_collection, get_client, upsert_chunks
@@ -39,11 +40,14 @@ def index_new_chunks(chunks: list[Chunk]) -> int:
     deterministic (see vector_store._point_id)."""
     if not chunks:
         return 0
-    vectors = embed_texts([c.text for c in chunks])
-
     client = get_client()
     ensure_collection(client, recreate=False)
-    upsert_chunks(client, chunks, vectors)
+
+    batch_size = max(1, settings.indexing_batch_size)
+    for start in range(0, len(chunks), batch_size):
+        batch = chunks[start : start + batch_size]
+        vectors = embed_texts([c.text for c in batch])
+        upsert_chunks(client, batch, vectors)
     return len(chunks)
 
 

@@ -27,7 +27,8 @@ import app.retrieval.indexer as indexer_module
 import app.retrieval.reranker as reranker_module
 from app.config import settings
 from app.main import app
-from app.retrieval.vector_store import get_client
+from app.ingestion.chunking import Chunk
+from app.retrieval.vector_store import ensure_collection, get_client, upsert_chunks
 
 EMBED_DIM = 384
 
@@ -63,6 +64,8 @@ def isolated_client(tmp_path, monkeypatch):
     pipeline_module._bm25_cache["mtime"] = None
 
     # Isolate Qdrant: temp local-file path, dedicated collection, fresh client.
+    monkeypatch.setattr(settings, "qdrant_url", "")
+    monkeypatch.setattr(settings, "qdrant_api_key", "")
     monkeypatch.setattr(settings, "qdrant_local_path", str(tmp_path / "qdrant_test"))
     monkeypatch.setattr(settings, "qdrant_collection", "test_api_flow")
     get_client.cache_clear()
@@ -114,9 +117,43 @@ def test_upload_rejects_unsupported_file_type(isolated_client, tmp_path):
     assert response.status_code == 400
 
 
+def test_upload_rejects_files_over_size_limit(isolated_client, monkeypatch):
+    monkeypatch.setattr(routes_module, "MAX_UPLOAD_BYTES", 5)
+
+    response = isolated_client.post(
+        "/upload",
+        files={"file": ("large.txt", b"this is too large", "text/plain")},
+    )
+
+    assert response.status_code == 413
+    assert "Maximum supported upload size" in response.json()["detail"]
+
+
 def test_query_with_no_documents_indexed_short_circuits(isolated_client):
     response = isolated_client.post("/query", json={"question": "anything"})
     assert response.status_code == 200
     data = response.json()
     assert data["warning"] == "no_documents_indexed"
     assert data["is_fully_grounded"] is False
+
+
+def test_query_can_use_chunks_loaded_from_qdrant_when_chunks_file_is_missing(isolated_client):
+    chunk = Chunk(
+        chunk_id="qdrant_only.md::0",
+        text="The archive restore command is restore_snapshot with the --verify flag.",
+        source="qdrant_only.md",
+        file_type="md",
+        chunk_index=0,
+        char_start=0,
+        char_end=70,
+    )
+    client = get_client()
+    ensure_collection(client, recreate=False)
+    upsert_chunks(client, [chunk], [_fake_vector(chunk.text)])
+
+    response = isolated_client.post("/query", json={"question": "Which command restores an archive snapshot?"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_fully_grounded"] is True
+    assert data["sources"][0]["source"] == "qdrant_only.md"

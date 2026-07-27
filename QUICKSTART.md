@@ -327,3 +327,12 @@ QDRANT_PORT=6333
 | `Points in collection: 0` after indexing | check the indexer actually printed "Indexed 12 chunks" with no error above it |
 | Groq call fails with auth error | `GROQ_API_KEY` missing or wrong in `.env` |
 | Ollama call fails to connect | Ollama isn't running locally — only relevant if you set `LLM_PROVIDER=ollama` |
+
+
+RAGAS Evaluation Report
+========================
+
+  faithfulness         0.811
+  answer_relevancy     nan
+  context_precision    0.281
+  context_recall       0.833

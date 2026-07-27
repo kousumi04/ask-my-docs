@@ -32,6 +32,7 @@ from app.retrieval.sparse import BM25Index, build_bm25_index
 from app.retrieval.sparse import search as bm25_search
 from app.retrieval.vector_store import get_client
 from app.retrieval.vector_store import search as vector_search
+from app.retrieval.vector_store import scroll_chunks
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHUNKS_PATH = PROJECT_ROOT / "data" / "processed" / "chunks.json"
@@ -46,15 +47,22 @@ def _load_chunks_from_disk() -> list[Chunk]:
     return [Chunk(**item) for item in raw]
 
 
+def _load_chunks_for_sparse_retrieval() -> list[Chunk]:
+    chunks_by_id = {chunk.chunk_id: chunk for chunk in _load_chunks_from_disk()}
+    try:
+        for chunk in scroll_chunks(get_client()):
+            chunks_by_id.setdefault(chunk.chunk_id, chunk)
+    except Exception:
+        pass
+    return list(chunks_by_id.values())
+
+
 def get_bm25_index() -> BM25Index | None:
     """Returns the cached BM25 index, rebuilding it if chunks.json has
     changed (or doesn't exist yet) since the last build."""
-    if not CHUNKS_PATH.exists():
-        return None
-
-    current_mtime = CHUNKS_PATH.stat().st_mtime
+    current_mtime = CHUNKS_PATH.stat().st_mtime if CHUNKS_PATH.exists() else None
     if _bm25_cache["index"] is None or _bm25_cache["mtime"] != current_mtime:
-        chunks = _load_chunks_from_disk()
+        chunks = _load_chunks_for_sparse_retrieval()
         _bm25_cache["index"] = build_bm25_index(chunks) if chunks else None
         _bm25_cache["mtime"] = current_mtime
 
